@@ -12,7 +12,7 @@
  */
 
 import { Elysia } from "elysia";
-import type { DocumentDecoration } from "elysia";
+import type { DocumentDecoration, AnyElysia } from "elysia";
 
 // ─── Module Augmentation ────────────────────────────────────────────
 // Extend Elysia's DocumentDecoration so `detail: { mcp: ... }` is type-safe.
@@ -382,6 +382,6 @@ export function mcp(options: McpPluginOptions = {}) {
  * Register the root Elysia app so the MCP plugin can discover its routes.
  * Must be called before any MCP requests are handled.
  */
-export function mcpRegisterRoot(app: Elysia) {
-  (globalThis as any).__ELYSIA_MCP_ROOT_APP__ = app;
+export function mcpRegisterRoot(app: AnyElysia) {
+  globalThis.__mcp_root_app = app;
 }
