@@ -23,6 +23,7 @@ declare module "elysia" {
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 import {
   CallToolRequestSchema,
   ErrorCode,
@@ -215,7 +216,7 @@ function createMcpServer(
 ): McpServer {
   const mcpServer = new McpServer(
     { name: serverName, version: serverVersion },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {} }, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
   );
 
   // Use the underlying Server for custom request handlers.
