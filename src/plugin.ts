@@ -11,7 +11,8 @@
  * hooks, and all plugins).
  */
 
-import type { DocumentDecoration, Elysia } from "elysia";
+import { Elysia } from "elysia";
+import type { DocumentDecoration } from "elysia";
 
 // ─── Module Augmentation ────────────────────────────────────────────
 // Extend Elysia's DocumentDecoration so `detail: { mcp: ... }` is type-safe.
@@ -282,99 +283,105 @@ function createMcpServer(
 export function mcp(options: McpPluginOptions = {}) {
   const { name = "elysia-mcp", version = "1.0.0", path = "/mcp", allRoutes = true } = options;
 
-  // Return a function-style plugin to capture the parent Elysia app reference.
-  // This gives us access to app.routes (for discovery) and app.handle() (for
-  // tool invocation through the full lifecycle).
-  return (app: Elysia) => {
-    // Cache invalidated whenever the route count changes (same strategy as elysia-openapi).
-    const emitted = new Set<string>();
-    const warn = (msg: string): void => {
-      if (emitted.has(msg)) return;
-      emitted.add(msg);
-      console.warn(msg);
-    };
-    let cachedRouteCount = -1;
-
-    let toolMap = new Map<string, DiscoveredTool>();
-    let toolListResponse: {
-      tools: Array<{
-        name: string;
-        description: string;
-        inputSchema: FlattenResult["schema"];
-      }>;
-    } = { tools: [] };
-
-    function refreshTools() {
-      if (app.routes.length === cachedRouteCount) return;
-      cachedRouteCount = app.routes.length;
-
-      const tools = discoverTools(app, allRoutes, warn);
-
-      toolMap = new Map<string, DiscoveredTool>();
-      for (const tool of tools) {
-        if (toolMap.has(tool.name)) {
-          warn(`[mcp] Duplicate tool name "${tool.name}" — later route will override`);
-        }
-        toolMap.set(tool.name, tool);
-      }
-      toolListResponse = {
-        tools: Array.from(toolMap.values(), (tool) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.flatten.schema,
-          ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-        })),
+  // Return an Elysia instance directly (not a function-style plugin) so Eden's
+  // type inference chain is preserved through .use() calls.
+  return new Elysia({ name: "elysia-mcp" }).all(
+    path,
+    async ({ request, body }: { request: Request; body: unknown }) => {
+      // Cache invalidated whenever the route count changes (same strategy as elysia-openapi).
+      const emitted = new Set<string>();
+      const warn = (msg: string): void => {
+        if (emitted.has(msg)) return;
+        emitted.add(msg);
+        console.warn(msg);
       };
 
-      if (tools.length === 0) {
-        warn("[mcp] No MCP-eligible routes found — MCP server will have no tools");
+      // Discover tools from the parent app's routes via request context
+      // We need to access the root Elysia instance - use a global reference set by the caller
+      const rootApp = (globalThis as any).__ELYSIA_MCP_ROOT_APP__;
+      if (!rootApp) {
+        throw new Error("Elysia MCP: root app not registered. Call mcpRegisterRoot(app) first.");
       }
-    }
 
-    // Register POST, GET, and DELETE on the same path so the SDK transport
-    // can handle the full Streamable HTTP protocol:
-    //   POST   — JSON-RPC request/response (initialize, tools/list, tools/call)
-    //   GET    — open a server-initiated SSE stream (Accept: text/event-stream)
-    //   DELETE — terminate a session
-    // The transport's handleRequest() dispatches internally based on the method.
-    return app.all(
-      path,
-      async ({ request, body }: { request: Request; body: unknown }) => {
-        refreshTools();
+      let cachedRouteCount = -1;
+      let toolMap = new Map<string, DiscoveredTool>();
+      let toolListResponse: {
+        tools: Array<{
+          name: string;
+          description: string;
+          inputSchema: FlattenResult["schema"];
+        }>;
+      } = { tools: [] };
 
-        const transport = new WebStandardStreamableHTTPServerTransport({
-          sessionIdGenerator: undefined,
-          enableJsonResponse: true,
-        });
+      function refreshTools() {
+        if (rootApp.routes.length === cachedRouteCount) return;
+        cachedRouteCount = rootApp.routes.length;
 
-        // Create a fresh McpServer per request — the MCP SDK's
-        // Protocol.connect() throws if the server is already connected,
-        // so reusing a single instance across concurrent requests would fail.
-        const server = createMcpServer(name, version, toolMap, toolListResponse, app, request);
-        await server.connect(transport);
+        const tools = discoverTools(rootApp, allRoutes, warn);
 
-        let response: Response;
-        try {
-          // Always pass parsedBody — Elysia has already consumed the request
-          // stream, so the SDK's fallback `req.json()` would fail. The SDK
-          // only reads parsedBody for POST; for GET/DELETE it's ignored.
-          response = await transport.handleRequest(request, { parsedBody: body });
-        } catch (err) {
-          await transport.close();
-          throw err;
+        toolMap = new Map<string, DiscoveredTool>();
+        for (const tool of tools) {
+          if (toolMap.has(tool.name)) {
+            warn(`[mcp] Duplicate tool name "${tool.name}" — later route will override`);
+          }
+          toolMap.set(tool.name, tool);
         }
+        toolListResponse = {
+          tools: Array.from(toolMap.values(), (tool) => ({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.flatten.schema,
+            ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
+          })),
+        };
 
-        // SSE responses keep their stream open until the client disconnects —
-        // closing the transport now would tear down the stream prematurely.
-        // JSON responses (POST with enableJsonResponse, DELETE) are fully
-        // buffered by the time handleRequest resolves, so it's safe to close.
-        if (response.headers.get("content-type") !== "text/event-stream") {
-          await transport.close();
+        if (tools.length === 0) {
+          warn("[mcp] No MCP-eligible routes found — MCP server will have no tools");
         }
+      }
 
-        return response;
-      },
-      { detail: { mcp: false } },
-    );
-  };
+      refreshTools();
+
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+
+      // Create a fresh McpServer per request — the MCP SDK's
+      // Protocol.connect() throws if the server is already connected,
+      // so reusing a single instance across concurrent requests would fail.
+      const server = createMcpServer(name, version, toolMap, toolListResponse, rootApp, request);
+      await server.connect(transport);
+
+      let response: Response;
+      try {
+        // Always pass parsedBody — Elysia has already consumed the request
+        // stream, so the SDK's fallback `req.json()` would fail. The SDK
+        // only reads parsedBody for POST; for GET/DELETE it's ignored.
+        response = await transport.handleRequest(request, { parsedBody: body });
+      } catch (err) {
+        await transport.close();
+        throw err;
+      }
+
+      // SSE responses keep their stream open until the client disconnects —
+      // closing the transport now would tear down the stream prematurely.
+      // JSON responses (POST with enableJsonResponse, DELETE) are fully
+      // buffered by the time handleRequest resolves, so it's safe to close.
+      if (response.headers.get("content-type") !== "text/event-stream") {
+        await transport.close();
+      }
+
+      return response;
+    },
+    { detail: { mcp: false } },
+  );
+}
+
+/**
+ * Register the root Elysia app so the MCP plugin can discover its routes.
+ * Must be called before any MCP requests are handled.
+ */
+export function mcpRegisterRoot(app: Elysia) {
+  (globalThis as any).__ELYSIA_MCP_ROOT_APP__ = app;
 }
