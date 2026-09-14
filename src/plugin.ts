@@ -383,5 +383,5 @@ export function mcp(options: McpPluginOptions = {}) {
  * Must be called before any MCP requests are handled.
  */
 export function mcpRegisterRoot(app: AnyElysia) {
-  globalThis.__mcp_root_app = app;
+  (globalThis as any).__ELYSIA_MCP_ROOT_APP__ = app;
 }
