@@ -32,7 +32,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "postinstall": "bun run build",
+    "postinstall": "cd $(dirname $0) && npx tsc -p tsconfig.build.json",
     "clean": "git clean -fdx -e '.env*' .",
     "format": "oxfmt .",
     "format:staged": "oxfmt --no-error-on-unmatched-pattern",
