@@ -218,11 +218,13 @@ function createMcpServer(
     { name: serverName, version: serverVersion },
     { capabilities: { tools: {} }, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
   );
-
+  
   // Use the underlying Server for custom request handlers.
   // We bypass McpServer's registerTool() because our tools use pre-built
   // JSON Schema from flattenSchemas(), not Zod schemas.
   const server = mcpServer.server;
+
+  console.log(server)
 
   server.setRequestHandler(ListToolsRequestSchema, () => toolListResponse);
 
