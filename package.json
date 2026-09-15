@@ -32,6 +32,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "postinstall": "bun run build",
     "clean": "git clean -fdx -e '.env*' .",
     "format": "oxfmt .",
     "format:staged": "oxfmt --no-error-on-unmatched-pattern",
@@ -43,6 +44,7 @@
     "fix": "bun lint:staged && bun format:staged"
   },
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
     "@modelcontextprotocol/sdk": "1.30.0"
   },
   "devDependencies": {
