@@ -35,7 +35,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "postinstall": "cd $(dirname $0) && npx tsc -p tsconfig.build.json",
+    "postinstall": "npx tsc -p tsconfig.build.json",
     "clean": "git clean -fdx -e '.env*' .",
     "format": "oxfmt .",
     "format:staged": "oxfmt --no-error-on-unmatched-pattern",
