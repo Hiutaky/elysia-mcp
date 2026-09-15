@@ -30,9 +30,9 @@
       "import": "./dist/index.js"
     }
   },
-  "prepare": "bun run build",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "postinstall": "bun run build",
     "clean": "git clean -fdx -e '.env*' .",
     "format": "oxfmt .",
     "format:staged": "oxfmt --no-error-on-unmatched-pattern",
