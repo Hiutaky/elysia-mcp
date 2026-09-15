@@ -43,7 +43,7 @@
     "fix": "bun lint:staged && bun format:staged"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "1.30.0"
   },
   "devDependencies": {
     "@elysiajs/cors": "^1.4.1",
