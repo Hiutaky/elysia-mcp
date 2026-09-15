@@ -21,6 +21,7 @@
     "dist",
     "src",
     "tsconfig.build.json",
+    "tsconfig.json",
     "LICENSE",
     "README.md"
   ],
